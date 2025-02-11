@@ -5,7 +5,10 @@ import (
 	"cbt-backend/models"
 	"cbt-backend/repositories"
 	"cbt-backend/services"
+	"cbt-backend/validators"
+	"fmt"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -24,13 +27,31 @@ func NewAuthHandler() *AuthHandler {
 
 func (h *AuthHandler) RegisterRoute(router fiber.Router) {
 	router.Post("/register", h.Register)
-	router.Post("/login", h.Login)
 }
 
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var user models.User
 	if err := c.BodyParser(&user); err != nil {
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
+	}
+
+	validators.Validate.RegisterValidation("usernameRegexp", validators.UsernameRegexp)
+
+	// Validasi user struct
+	err := validators.Validate.Struct(user)
+	if err != nil {
+		// Membuat map untuk menampung error
+		validationErrors := make(map[string]string)
+		// Iterasi error dan tampilkan penjelasan lengkap
+		for _, err := range err.(validator.ValidationErrors) {
+			// Menambahkan informasi lengkap tentang error
+			validationErrors[err.Field()] = fmt.Sprintf("Invalid value for '%s', expected %s", err.Field(), err.Tag())
+		}
+		// Mengembalikan error dalam format JSON
+		return c.Status(400).JSON(fiber.Map{
+			"validation_errors": validationErrors,
+		})
 	}
 
 	ctx := c.Context()
@@ -39,35 +60,9 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	return c.JSON(fiber.Map{
-		"status":  "success",
+	return c.Status((fiber.StatusCreated)).JSON(fiber.Map{
+		"status":  true,
 		"code":    fiber.StatusCreated,
 		"message": "User registered successfully",
-	})
-}
-
-func (h *AuthHandler) Login(c *fiber.Ctx) error {
-	req := &models.Login{}
-
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
-	}
-
-	// Mendapatkan context dari Fiber dan meneruskannya
-	ctx := c.Context()
-
-	token, err := h.authService.Login(ctx, req.Username, req.Password)
-	if err != nil {
-		if err.Error() == "invalid password" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username or password"})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Something went wrong"})
-	}
-
-	return c.JSON(fiber.Map{
-		"status":  "succes",
-		"message": "login berhasil",
-		"code":    fiber.StatusOK,
-		"token":   token,
 	})
 }
