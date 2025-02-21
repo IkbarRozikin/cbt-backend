@@ -11,8 +11,8 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, user *models.User) error
-	Login(ctx context.Context, username, password string) (string, error)
+	RegisterService(ctx context.Context, user *models.User) error
+	LoginService(ctx context.Context, user *models.Login) (string, error)
 }
 
 type authService struct {
@@ -25,7 +25,7 @@ func NewAuthService(userRepo repositories.UserRepository) AuthService {
 	}
 }
 
-func (s *authService) Register(ctx context.Context, user *models.User) error {
+func (s *authService) RegisterService(ctx context.Context, user *models.User) error {
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -37,21 +37,21 @@ func (s *authService) Register(ctx context.Context, user *models.User) error {
 	return s.userRepository.CreateUser(ctx, user)
 }
 
-func (s *authService) Login(ctx context.Context, username, password string) (string, error) {
+func (s *authService) LoginService(ctx context.Context, user *models.Login) (string, error) {
 
-	user, err := s.userRepository.GetUserByUsername(ctx, username)
+	storedUser, err := s.userRepository.GetByUsername(user.Username)
 
 	if err != nil {
-		return "", errors.New("user not found")
+		return "", errors.New("invalid email or password")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", errors.New("invalid password")
+	if err := bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password)); err != nil {
+		return "", errors.New("invalid email or password")
 	}
 
-	token, err := utils.GenerateJWT(user.ID, user.Role)
+	token, err := utils.GenerateJWT(storedUser.ID, storedUser.RoleID, storedUser.SchoolID)
 	if err != nil {
-		return "", err
+		return "", errors.New("could not generate token")
 	}
 
 	return token, nil

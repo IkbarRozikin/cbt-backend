@@ -1,8 +1,10 @@
 package main
 
 import (
-	"cbt-backend/database"
+	"cbt-backend/db"
 	"cbt-backend/handlers"
+	"cbt-backend/repositories"
+	"cbt-backend/services"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,22 +13,32 @@ import (
 )
 
 func main() {
-
+	// Inisialisasi Fiber
 	app := fiber.New()
 
-	database.Connect()
+	// Koneksi ke Database
+	db.Connect()
 
-	app.Use(logger.New()) // Log setiap request
-	app.Use(recover.New())
+	// Middleware
+	app.Use(logger.New())  // Logging request
+	app.Use(recover.New()) // Menangani panic agar tidak crash
 
-	// Inisialisasi handler
-	authHandler := handlers.NewAuthHandler()
-	//
+	// Inisialisasi Repository
+	userRepo := repositories.NewUserRepository(db.DB)
 
-	// Rute
+	// Inisialisasi Service
+	authService := services.NewAuthService(userRepo)
+	userService := services.NewUserService(userRepo)
+
+	// Inisialisasi Handler
+	authHandler := handlers.NewAuthHandler(authService)
+	userHandler := handlers.NewUserHandler(userService)
+
+	// Rute API
 	api := app.Group("/api/v1")
 	authHandler.RegisterRoute(api.Group("/auth"))
+	userHandler.RegisterRoute(api.Group("/users"))
 
+	// Jalankan Server
 	log.Fatal(app.Listen(":3000"))
-
 }
